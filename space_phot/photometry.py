@@ -718,8 +718,10 @@ class observation():
                     labelbottom=False,
                     labelleft=False) # labels along the bottom edge are off
         plt.tight_layout()
-        #plt.show()
-        return fig
+        print('returning sub images')
+        image_stack = [self.psf_result.data_arr[0],self.psf_result.bkg_arr[0],self.psf_result.psf_arr[0],self.psf_result.psf_arr[0]+self.psf_result.bkg_arr[0],self.psf_result.resid_arr[0]]
+        return fig, image_stack
+        # return fig
 
     def plot_psf_posterior(self,minweight=-np.inf):
         """
