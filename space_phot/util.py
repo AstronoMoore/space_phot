@@ -426,171 +426,210 @@ def get_jwst3_psf_spike(st_obs,st_obs3,sky_location,temp_outdir='.',verbose=True
                 drizzleparams = {'pixel_scale':st_obs3.pixel_scale, 'output_wcs': st_obs3.wcs})
     return(psf_drz)
 
-def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdir='.'):
-    with open('./stpipe-log.cfg','w') as f:
-        s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
-        f.write(s)
-    #sys.exit()
-    psfs = get_jwst_psf(st_obs,sky_location,psf_width=psf_width,pipeline_level=3)
+import numpy as np
 
-    #grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
-    #grid.oversampling = 1
-    # kernel = astropy.convolution.Box2DKernel(width=4)
-    # psfs = []
-    # for i in range(st_obs.n_exposures):
-    #     imwcs = st_obs.wcs_list[i]
-    #     x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-    #     psf = inst.calc_psf(oversample=4,normalize='last')
-    #     psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
-    # #    grid.x_0 = x
-    # #    grid.y_0 = y
-    # #
-    # #    xf, yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
-    # #                        np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
+from astropy.io import fits
+from astropy import units as u
+from astropy.wcs import WCS as AstropyWCS
+from astropy.wcs.utils import wcs_to_celestial_frame
+from astropy.modeling import models
 
-    # #    psf = np.array(grid(xf,yf)).astype(float)
-    #     epsf_model = photutils.psf.ImagePSF(psf,normalize=True,oversampling=1)
-    #     psfs.append(epsf_model)
+from asdf import AsdfFile
 
-    outdir = os.path.join(temp_outdir,'temp_psf_dir')#%np.random.randint(0,1000))
+from gwcs import wcs as gwcs_wcs
+from gwcs import coordinate_frames as cf
+
+
+def _build_output_gwcs_from_fits_header(ref_fname):
+    """
+    Build a fresh, serializable TAN GWCS from the SCI extension FITS header.
+
+    Compatible with older gwcs versions that do not have
+    FITSImagingWCSTransform.
+    """
+    with fits.open(ref_fname) as hdul:
+        sci = hdul["SCI", 1]
+        header = sci.header
+        ny, nx = sci.data.shape
+
+    awcs = AstropyWCS(header).celestial
+
+    ctype1 = awcs.wcs.ctype[0]
+    ctype2 = awcs.wcs.ctype[1]
+    if "TAN" not in ctype1 or "TAN" not in ctype2:
+        raise NotImplementedError(
+            f"Only TAN celestial WCS is handled here. Got CTYPE={awcs.wcs.ctype}"
+        )
+
+    # FITS CRPIX is 1-based; GWCS pipeline here is easiest if we shift
+    # by (CRPIX - 1), i.e. use 0-based pixel coordinates.
+    crpix1, crpix2 = np.asarray(awcs.wcs.crpix, dtype=float)
+    crval1, crval2 = np.asarray(awcs.wcs.crval, dtype=float)
+
+    # Full linear matrix in deg / pixel.
+    # This is effectively the CD matrix.
+    cd = np.asarray(awcs.pixel_scale_matrix, dtype=float)
+
+    # Native longitude of celestial pole
+    lon_pole = awcs.wcs.lonpole
+    if lon_pole is None or not np.isfinite(lon_pole):
+        lon_pole = 180.0
+
+    # Build FITS-equivalent TAN transform manually:
+    #   shift pixel origin -> linear transform -> TAN projection -> rotate to CRVAL
+    det2sky = (
+        (models.Shift(1.0 - crpix1) & models.Shift(1.0 - crpix2))
+        | models.AffineTransformation2D(matrix=cd)
+        | models.Pix2Sky_Gnomonic()
+        | models.RotateNative2Celestial(crval1, crval2, lon_pole)
+    )
+
+    detector_frame = cf.Frame2D(
+        name="detector",
+        axes_names=("x", "y"),
+        unit=(u.pix, u.pix),
+    )
+
+    sky_frame = cf.CelestialFrame(
+        reference_frame=wcs_to_celestial_frame(awcs),
+        name="sky",
+        unit=(u.deg, u.deg),
+    )
+
+    gw = gwcs_wcs.WCS([
+        (detector_frame, det2sky),
+        (sky_frame, None),
+    ])
+
+    gw.array_shape = (ny, nx)
+    gw.pixel_shape = (nx, ny)
+    gw.bounding_box = ((0, nx - 1), (0, ny - 1))
+
+    return gw, (ny, nx)
+
+
+def _write_resample_output_wcs(ref_fname, out_asdf):
+    gw, (ny, nx) = _build_output_gwcs_from_fits_header(ref_fname)
+
+    tree = {
+        "wcs": gw,
+        "array_shape": (ny, nx),
+        "pixel_shape": (nx, ny),
+    }
+
+    AsdfFile(tree).write_to(out_asdf)
+
+
+def get_jwst3_psf(st_obs, st_obs3, sky_location, num_psfs=4, psf_width=31, temp_outdir="."):
+    with open("./stpipe-log.cfg", "w") as f:
+        f.write("[*]\nhandler = file:/dev/null\nlevel = INFO\n")
+
+    psfs = get_jwst_psf(st_obs, sky_location, psf_width=psf_width, pipeline_level=3)
+
+    outdir = os.path.join(temp_outdir, "temp_psf_dir")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
 
-    #print(outdir)
     level2_sums = []
+
     try:
         out_fnames = []
-        for i,f in enumerate(st_obs.exposure_fnames):
-            #print(f)
-            dat = fits.open(f)
+        for i, f in enumerate(st_obs.exposure_fnames):
+            with fits.open(f) as dat:
+                imwcs = wcs.WCS(dat["SCI", 1])
+                y, x = skycoord_to_pixel(sky_location, imwcs)
 
-            imwcs = wcs.WCS(dat['SCI',1])
-            #print(imwcs)
-            y,x = skycoord_to_pixel(sky_location,imwcs)
+                xf, yf = np.mgrid[
+                    0:dat["SCI", 1].data.shape[0],
+                    0:dat["SCI", 1].data.shape[1]
+                ].astype(int)
 
-            #xf, yf = np.mgrid[0:dat['SCI',1].data.shape[0]+int(psf_width*8),0:dat['SCI',1].data.shape[1]+int(psf_width*8)].astype(int)
-            xf, yf = np.mgrid[0:dat['SCI',1].data.shape[0],0:dat['SCI',1].data.shape[1]].astype(int)
-            #psfs[i].x_0 = x+psf_width*4
-            #psfs[i].y_0 = y+psf_width*4
-            psfs[i].x_0 = x#int(x)+.5
-            psfs[i].y_0 = y#int(y)+.5
-            #import pdb
-            #pdb.set_trace()
-            #dat['SCI',1].data = psfs[i].data#
-            dat['SCI',1].data = psfs[i](xf,yf)
-            level2_sums.append(np.sum(dat['SCI',1].data))
-            dat.writeto(os.path.join(outdir,os.path.basename(f)),overwrite=True)
-            #out_fnames.append(os.path.join(outdir,os.path.basename(f)))
-            out_fnames.append(os.path.basename(f))
-        #sys.exit()
-        asn = asn_from_list.asn_from_list(out_fnames, rule=DMS_Level3_Base,
-            product_name='temp_psf_cals')
+                psfs[i].x_0 = x
+                psfs[i].y_0 = y
+                dat["SCI", 1].data = psfs[i](xf, yf)
 
-        with open(os.path.join(outdir,'cal_data_asn.json'),"w") as outfile:
-            name, serialized = asn.dump(format='json')
+                level2_sums.append(np.sum(dat["SCI", 1].data))
+
+                outfile = os.path.join(outdir, os.path.basename(f))
+                dat.writeto(outfile, overwrite=True)
+                out_fnames.append(os.path.basename(f))
+
+        asn = asn_from_list.asn_from_list(
+            out_fnames,
+            rule=DMS_Level3_Base,
+            product_name="temp_psf_cals"
+        )
+
+        asn_path = os.path.join(outdir, "cal_data_asn.json")
+        with open(asn_path, "w") as outfile:
+            name, serialized = asn.dump(format="json")
             outfile.write(serialized)
 
-        ref_image = fits.open(st_obs3.fname)['SCI',1]
-        ref_dm = datamodels.open(st_obs3.fname)
-        gw = ref_dm.meta.wcs
-        ny, nx = ref_dm.data.shape
-        gw.bounding_box = ((0, nx), (0, ny))  # or (0, nx-1), depending on your convention
+        # Build the output_wcs ASDF for the resample step using the
+        # embedded GWCS from the reference L3 product.
+        ref_wcs_path = os.path.join(temp_outdir, "ref_wcs.asdf")
+        _write_resample_output_wcs(st_obs3.fname, ref_wcs_path)
 
-        AsdfFile({"wcs": gw}).write_to(os.path.join(temp_outdir, "ref_wcs.asdf"))
-        # ref_wcs = wcs.WCS(ref_image)
-        # transform = make_fitswcs_transform(ref_image.header) 
-        # # 3. Define frames
-        # detector_frame = cf.Frame2D(
-        #     name="detector",
-        #     axes_names=("x", "y"),
-        #     unit=(u.pix, u.pix),
-        # )
+        params = {
+            "assign_mtwcs": {"skip": True},
+            "tweakreg": {"skip": True},
+            "skymatch": {"skip": True},
+            "outlier_detection": {"skip": True},
+            "resample": {
+                "pixfrac": 1.0,
+                "kernel": "square",
+                "fillval": "indef",
+                "weight_type": "ivm",
+                "output_wcs": ref_wcs_path,
+                "in_memory": False,
+                "save_results": True,
+            },
+            "source_catalog": {"skip": True},
+        }
 
-        # sky_frame = cf.CelestialFrame(
-        #     name="icrs",
-        #     reference_frame=coord.ICRS(),
-        #     unit=(u.deg, u.deg),
-        # )
-        # # 4. Build the GWCS pipeline
-        # pipeline = [(detector_frame, transform), (sky_frame, None)]
-        # gw = gwcs.WCS(pipeline)
+        Image3Pipeline.call(
+            asn_path,
+            steps=params,
+            output_dir=outdir,
+            save_results=True
+        )
 
-        # ny,nx = ref_image.data.shape
-
-        # # 5. Set bounding box
-        # # NOTE: GWCS uses "F" order: ((xmin, xmax), (ymin, ymax)) for (x, y) axes
-        # gw.bounding_box = ((0, nx), (0, ny))
-
-        # #ref_wcs = #gwcs.wcs.WCS(ref_image)
-        # tree = {"wcs": gw}
-        #wcs_file = AsdfFile(tree)
-        #wcs_file.write_to(os.path.join(temp_outdir,'ref_wcs.asdf'))
-        
-        params = {'assign_mtwcs':  {'skip': True},
-                              'tweakreg':          {'skip': True},
-                              'skymatch':          {'skip': True},
-                              'outlier_detection': {'skip': True},
-                              'resample':          {'pixfrac'      : 1.,
-                                                    'kernel'       : 'square',
-                                                    #'pixel_scale'  : st_obs3.pixel_scale,
-                                                    #'rotation'     : ref_pa,#0, #-66.8983245393371,
-                                                    #'output_shape' : list(ref_image.shape),
-                                                    #'crpix'        : [0,0],
-                                                    #'crval'        : ref_crval,
-                                                    'fillval'      :'indef',
-                                                    'weight_type'  :'ivm',
-                                                    'output_wcs': os.path.join(temp_outdir,'ref_wcs.asdf'),
-                                                    #'single'       : True,
-                                                    #'blendheaders' : False,
-
-                                                    'in_memory' : False,
-                                                    'save_results' : True},
-                              'source_catalog':    {'skip': True}}
-        Image3Pipeline.call(os.path.join(outdir,'cal_data_asn.json'),steps=params,
-            output_dir=outdir,save_results=True)
-        
-
-        #imwcs = None
-        #level3 = None
-        with fits.open(os.path.join(outdir,'temp_psf_cals_i2d.fits')) as dat:
-            imwcs = wcs.WCS(dat['SCI',1])
+        with fits.open(os.path.join(outdir, "temp_psf_cals_i2d.fits")) as dat:
+            imwcs = wcs.WCS(dat["SCI", 1])
             level3 = dat[1].data
 
         level3[np.isnan(level3)] = 0
-        level3[level3<0] = 0
-        #print(np.max(level3))
-        #sys.exit()
+        level3[level3 < 0] = 0
 
-        #kernel = astropy.convolution.Box2DKernel(width=4)
-        #level3 = astropy.convolution.convolve(level3, kernel)
-        y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        # mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5+psf_width*4),
-        #                     np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5+psf_width*4))
-        mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
-                            np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
+        y, x = astropy.wcs.utils.skycoord_to_pixel(sky_location, imwcs)
+        mx, my = np.meshgrid(
+            np.arange(-4 * psf_width / 2, psf_width / 2 * 4 + 1, 1).astype(int) + int(x + 0.5),
+            np.arange(-4 * psf_width / 2, psf_width / 2 * 4 + 1, 1).astype(int) + int(y + 0.5)
+        )
 
+        level3_psf = photutils.psf.ImagePSF(level3[mx, my], oversampling=1)
 
-
-        level3_psf = photutils.psf.ImagePSF(level3[mx,my],
-                                                      oversampling=1)
-
-        #import pdb
-        #pdb.set_trace()
-        temp_fnames = glob.glob(os.path.join(outdir,'*'))
-        for f in temp_fnames:
-            os.remove(f)
-        shutil.rmtree(outdir, ignore_errors=True)
-        #os.rmdir(outdir)
-        os.remove('stpipe-log.cfg')
-    except RuntimeError:#Exception as e:
-        print('Failed to create PSF model')
+    except Exception as e:
+        print("Failed to create PSF model")
         print(e)
-        temp_fnames = glob.glob(os.path.join(outdir,'*'))
-        for f in temp_fnames:
-            os.remove(f)
-        shutil.rmtree(outdir, ignore_errors=True)
-        os.remove('stpipe-log.cfg')
+        raise
 
+    finally:
+        temp_fnames = glob.glob(os.path.join(outdir, "*"))
+        for f in temp_fnames:
+            try:
+                os.remove(f)
+            except IsADirectoryError:
+                pass
+            except FileNotFoundError:
+                pass
+
+        shutil.rmtree(outdir, ignore_errors=True)
+
+        try:
+            os.remove("stpipe-log.cfg")
+        except FileNotFoundError:
+            pass
 
     return level3_psf
 
