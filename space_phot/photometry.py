@@ -851,7 +851,7 @@ class observation3(observation):
                 x1 = int(np.round(new_x)) - hx
                 x2 = x1 + w
                 yf,xf = np.mgrid[y1:y2, x1:x2]
-                cutout = self.data_arr_pam[im][xf,yf]
+                cutout = self.data[xf,yf]
                 centers.append([new_x,new_y])
                 
         else:
