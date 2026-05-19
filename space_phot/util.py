@@ -66,6 +66,75 @@ from .wfc3_photometry.psf_tools.PSFPhot import get_standard_psf
 __all__ = ['get_jwst_psf','get_hst_psf','get_jwst3_psf','get_hst3_psf','get_jwst_psf_grid',
             'get_jwst_psf_from_grid']
 
+def _rough_skycoord_in_image(
+    sky_location,
+    w,
+    nx,
+    ny,
+    buffer=0.0,
+    inflate=1.25,
+):
+    """
+    Fast conservative pre-check for whether a SkyCoord could plausibly
+    fall on an image.
+
+    This avoids expensive/inaccurate inverse WCS calls for points that
+    are obviously far away.
+    """
+
+    wc = w.celestial
+
+    # Need a basic celestial WCS
+    if wc.wcs.crval is None or len(wc.wcs.crval) < 2:
+        return True  # fail open; let the real WCS check decide
+
+    # Reference sky position, usually CRVAL
+    ref_sky = SkyCoord(
+        wc.wcs.crval[0],
+        wc.wcs.crval[1],
+        unit="deg",
+        frame="icrs",
+    )
+
+    # CRPIX is 1-indexed FITS convention; convert to 0-indexed pixel coords
+    try:
+        crpix_x = wc.wcs.crpix[0] - 1
+        crpix_y = wc.wcs.crpix[1] - 1
+    except Exception:
+        crpix_x = 0.5 * (nx - 1)
+        crpix_y = 0.5 * (ny - 1)
+
+    # Farthest image corner from the WCS reference pixel
+    corners = np.array([
+        [0, 0],
+        [nx - 1, 0],
+        [0, ny - 1],
+        [nx - 1, ny - 1],
+    ])
+
+    dx = corners[:, 0] - crpix_x
+    dy = corners[:, 1] - crpix_y
+    max_radius_pix = np.max(np.hypot(dx, dy))
+
+    # Add requested edge buffer
+    max_radius_pix += buffer
+
+    # Approximate pixel scale in deg/pix.
+    # Use max scale to be conservative.
+    try:
+        pix_scales_deg = proj_plane_pixel_scales(wc)
+        pix_scale = np.nanmax(np.abs(pix_scales_deg)) * u.deg
+    except Exception:
+        return True  # fail open
+
+    if not np.isfinite(pix_scale.value) or pix_scale.value <= 0:
+        return True  # fail open
+
+    rough_radius = inflate * max_radius_pix * pix_scale
+
+    sep = sky_location.separation(ref_sky)
+
+    return sep <= rough_radius
 
 def mjd_dict_from_list(filelist, tolerance=0):
     """
@@ -106,6 +175,8 @@ def filter_dict_from_list(
     sky_location=None,
     ext=1,
     buffer=0.0,
+    rough_check=True,
+    rough_inflate=1.25,
 ):
     """
     Group FITS files by FILTER keyword, with an optional check that a
@@ -122,46 +193,77 @@ def filter_dict_from_list(
     ext : int, optional
         FITS extension to read the WCS / FILTER keyword from.
     buffer : float, optional
-        Required minimum distance (in pixels) between the derived pixel
-        coordinate and all image edges. Default: 0 (no edge exclusion).
-
-        A file is only included if:
-            buffer <= x <= nx - 1 - buffer
-            buffer <= y <= ny - 1 - buffer
+        Required minimum distance in pixels from all image edges.
+    rough_check : bool, optional
+        If True, do a fast SkyCoord separation pre-check before calling
+        world_to_pixel.
+    rough_inflate : float, optional
+        Safety factor for the rough sky-radius check. Larger values are
+        more conservative and reduce the chance of incorrectly rejecting
+        a real overlap.
 
     Returns
     -------
     filt_dict : dict
         Dictionary mapping filter name → list of filenames.
     """
+
     filt_dict = {}
 
     for fname in filelist:
         try:
-            with fits.open(fname) as hdul:
+            with fits.open(fname, memmap=True) as hdul:
                 header = hdul[ext].header
+
                 filt = header.get("FILTER")
-                if filt is None and ext==1:
-                    filt = hdul[0].header.get('FILTER')    
-                    if filt is None:
+                if filt is None and ext == 1:
+                    filt = hdul[0].header.get("FILTER")
+
+                if filt is None:
+                    continue
+
+                if sky_location is not None:
+                    # Get image shape without forcing data load if possible
+                    nx = header.get("NAXIS1")
+                    ny = header.get("NAXIS2")
+
+                    if nx is None or ny is None:
+                        if hdul[ext].data is None:
+                            continue
+                        ny, nx = hdul[ext].data.shape
+
+                    try:
+                        full_wcs = wcs.WCS(header)
+                        cel_wcs = full_wcs.celestial
+                    except Exception:
                         continue
 
-                # If sky check requested…
-                if sky_location is not None:
+                    # Fast pre-check: skip files that are obviously far away
+                    if rough_check:
+                        try:
+                            possibly_on_image = _rough_skycoord_in_image(
+                                sky_location,
+                                cel_wcs,
+                                nx,
+                                ny,
+                                buffer=buffer,
+                                inflate=rough_inflate,
+                            )
+                        except Exception:
+                            possibly_on_image = True  # fail open
+
+                        if not possibly_on_image:
+                            continue
+
+                    # Exact WCS check
                     try:
-                        w = wcs.WCS(header)
-                        x, y = w.world_to_pixel(sky_location)
+                        x, y = cel_wcs.world_to_pixel(sky_location)
                     except Exception:
-                        # WCS transform failed → exclude file
                         continue
-                    # Reject NaNs or infs
+
                     if not np.isfinite(x) or not np.isfinite(y):
                         continue
 
-                    # Image shape for bounds check
-                    ny, nx = hdul[ext].data.shape
-
-                    # Pixel must lie inside detector and outside edge buffer
                     if (
                         x < buffer
                         or y < buffer
@@ -170,11 +272,9 @@ def filter_dict_from_list(
                     ):
                         continue
 
-                # Passed all checks → add file
                 filt_dict.setdefault(filt, []).append(fname)
 
         except Exception:
-            # unreadable FITS, bad header, etc — ignore
             continue
 
     return filt_dict
