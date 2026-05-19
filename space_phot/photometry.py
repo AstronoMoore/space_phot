@@ -2027,8 +2027,7 @@ class observation2(observation):
                 yf,xf = np.mgrid[y1:y2, x1:x2]
                 cutout = self.data_arr_pam[im][xf,yf]
                 centers.append([new_x,new_y])
-                #plt.imshow(cutout)
-                #plt.show()
+                
             else:
                 centers.append([xi,yi])
 
