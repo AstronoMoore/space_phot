@@ -365,12 +365,15 @@ class observation():
         sums = [np.sum(f) for f in fluxes]
         all_weights = []
         for i in range(len(fluxes)):
-            y, x = np.indices(fluxes[i].shape)
-            yc, xc = np.array(fluxes[i].shape) // 2  # Central coordinates
-            distance_squared = (x - xc) ** 2 + (y - yc) ** 2
-            all_weights.append(np.exp(-center_weight * distance_squared / np.max(distance_squared)))
-            #all_weights[-1]*=(fluxes[i].size/np.sum(all_weights[-1]))
-            all_weights[-1]/=np.sum(all_weights[-1])
+            if center_weight is None:
+                all_weights.append(1)
+            else:
+                y, x = np.indices(fluxes[i].shape)
+                yc, xc = np.array(fluxes[i].shape) // 2  # Central coordinates
+                distance_squared = (x - xc) ** 2 + (y - yc) ** 2
+                all_weights.append(np.exp(-center_weight * distance_squared / np.max(distance_squared)))
+                #all_weights[-1]*=(fluxes[i].size/np.sum(all_weights[-1]))
+                all_weights[-1]/=np.sum(all_weights[-1])
 
         def chisq_likelihood(parameters):
             total = 0
@@ -721,7 +724,7 @@ class observation3(observation):
     def psf_photometry(self,psf_model,sky_location=None,xy_position=None,fit_width=None,background=None,
                         fit_flux=True,fit_centroid=True,fit_bkg=False,bounds={},npoints=100,use_MLE=False,
                         xshift=0,yshift=0,centroidx_shift=0,centroidy_shift=0,
-                        maxiter=None,find_centroid=False,minVal=-np.inf,psf_method='nest',center_weight=20):
+                        maxiter=None,find_centroid=False,minVal=-np.inf,psf_method='nest',center_weight=None):
         """
         st_phot psf photometry class for level 2 data.
 
@@ -1870,7 +1873,7 @@ class observation2(observation):
 
     def psf_photometry(self,psf_model,sky_location=None,xy_positions=[],fit_width=None,background=None,
                         fit_flux='single',fit_centroid='pixel',fit_bkg=False,bounds={},npoints=100,use_MLE=False,
-                        maxiter=None,find_centroid=False,minVal=-np.inf,center_weight=20.0,
+                        maxiter=None,find_centroid=False,minVal=-np.inf,center_weight=None,
                         xshift=0,yshift=0):
         """
         st_phot psf photometry class for level 2 data.
