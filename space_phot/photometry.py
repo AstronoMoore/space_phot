@@ -834,19 +834,35 @@ class observation3(observation):
         self.bkg_fluxes = [all_bg_est]
 
         if find_centroid:
-            #xi2,yi2 = photutils.centroids.centroid_com(cutout)
-            xi2,yi2 = np.argmax(cutout)
 
-            xi += (xi2-(fit_width-1)/2)
-            yi += (yi2-(fit_width-1)/2)
-            yf, xf = yg+np.round(yi).astype(int), xg+np.round(xi).astype(int)
-            cutout = self.data[xf, yf]
+                h, w = cutout.shape
+                hx, hy = w // 2, h // 2
+
+                peak_idx = np.argmax(cutout)
+                peak_y,peak_x = np.unravel_index(peak_idx, cutout.shape)
+
+                dy = peak_y - hy
+                dx = peak_x - hx
+
+                new_x = xi + dx
+                new_y = yi + dy
+
+
+                y1 = int(np.round(new_y)) - hy
+                y2 = y1 + h
+                x1 = int(np.round(new_x)) - hx
+                x2 = x1 + w
+                yf,xf = np.mgrid[y1:y2, x1:x2]
+                cutout = self.data[xf,yf]
+                centers.append([new_x,new_y])
+                
+        else:
+            centers.append([xi+centroidx_shift,yi+centroidy_shift])
         all_xf.append(xf)
         all_yf.append(yf)
         cutout[cutout<minVal] = 0
 
-        center = [xi+centroidx_shift,yi+centroidy_shift]
-        centers.append(center)
+
         
         err = self.err[xf, yf]
         err[np.isnan(err)] = np.nanmax(err)
@@ -2013,8 +2029,7 @@ class observation2(observation):
                 yf,xf = np.mgrid[y1:y2, x1:x2]
                 cutout = self.data_arr_pam[im][xf,yf]
                 centers.append([new_x,new_y])
-                #plt.imshow(cutout)
-                #plt.show()
+                
             else:
                 centers.append([xi,yi])
 
