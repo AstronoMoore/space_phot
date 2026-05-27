@@ -273,7 +273,7 @@ class observation():
 
 
     def nest_psf(self,vparam_names, bounds,fluxes, fluxerrs,xs,ys,cutout_big=None,psf_width=7,use_MLE=False,
-                       minsnr=0., priors=None, ppfs=None, npoints=100, method='single',center_weight=20,
+                       minsnr=0., priors=None, ppfs=None, npoints=100, method='single',center_weight=None,
                        maxiter=None, maxcall=None, modelcov=False, rstate=None,
                        verbose=False, warn=True, **kwargs):
 
@@ -841,7 +841,7 @@ class observation3(observation):
                 h, w = cutout.shape
                 hx, hy = w // 2, h // 2
 
-                peak_idx = np.argmax(cutout)
+                peak_idx = np.nanargmax(cutout)
                 peak_y,peak_x = np.unravel_index(peak_idx, cutout.shape)
 
                 dy = peak_y - hy
@@ -1998,7 +1998,7 @@ class observation2(observation):
                 h, w = cutout.shape
                 hx, hy = w // 2, h // 2
 
-                peak_idx = np.argmax(cutout)
+                peak_idx = np.nanargmax(cutout)
                 peak_y,peak_x = np.unravel_index(peak_idx, cutout.shape)
 
                 # Offset from old center (can be fractional if desired)
