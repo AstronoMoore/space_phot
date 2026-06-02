@@ -396,6 +396,8 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
         #inst.pixelscale = st_obs.pixel_scale[i]
         imwcs = st_obs.wcs_list[i]
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
+        x = x[0]
+        y = y[0]
         #inst.detector_position = (x,y)
         c = stpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = 1, psf_location = (x,y), fov_pixels = psf_width,
                                                                         detectors=st_obs.detector,save=False,verbose=False,
