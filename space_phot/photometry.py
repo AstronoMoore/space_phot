@@ -1970,7 +1970,8 @@ class observation2(observation):
                 xi,yi = xy_positions[im]
             else:
                 yi,xi = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[im])
-            
+                yi = yi[0]
+                xi = xi[0]
             xi+=xshift[im]
             yi+=yshift[im]
             
