@@ -357,8 +357,8 @@ def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
     for i in range(st_obs.n_exposures):
         imwcs = st_obs.wcs_list[i]
         x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        grid.x_0 = x
-        grid.y_0 = y
+        grid.x_0 = x[0]
+        grid.y_0 = y[0]
 
         xf, yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
@@ -1212,6 +1212,8 @@ def hst_aperture_phot(fname,force_ra,force_dec,filt,radius=3,
     sky_location = SkyCoord(force_ra,force_dec,unit=unit)
     imwcs = wcs.WCS(drc_dat.header,data_file)
     x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
+    x = x[0]
+    y = y[0]
     px_scale = wcs.utils.proj_plane_pixel_scales(imwcs)[0] * imwcs.wcs.cunit[0].to('arcsec')
     try:
         zp = hst_get_zp(filt,'ab')
