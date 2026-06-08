@@ -576,10 +576,11 @@ class observation():
                     labelbottom=False,
                     labelleft=False) # labels along the bottom edge are off
         plt.tight_layout()
+        #plt.show()
         print('returning sub images')
         image_stack = [self.psf_result.data_arr[0],self.psf_result.bkg_arr[0],self.psf_result.psf_arr[0],self.psf_result.psf_arr[0]+self.psf_result.bkg_arr[0],self.psf_result.resid_arr[0]]
         return fig, image_stack
-    
+
     def plot_psf_posterior(self,minweight=-np.inf):
         """
         Plot the posterior corner plot from nested sampling
