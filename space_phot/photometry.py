@@ -16,7 +16,7 @@ from dynesty.pool import Pool
 
 
 import photutils
-from photutils.psf import EPSFModel
+from photutils.psf import ImagePSF
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -888,13 +888,13 @@ class observation3(observation):
         if fit_centroid:
             pnames.append(f'x0')
             pnames.append(f'y0')
-            p0s = np.append(f_guess,[center]).flatten()
+            p0s = np.append(f_guess,[centers]).flatten()
         
                   
         else:
             p0s = np.array(f_guess)
-            self.psf_model_list[0].x_0 = center[0]
-            self.psf_model_list[0].y_0 = center[1]
+            self.psf_model_list[0].x_0 = centers[0]
+            self.psf_model_list[0].y_0 = centers[1]
 
         pnames = np.array(pnames).ravel()
 
