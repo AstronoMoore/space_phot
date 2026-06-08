@@ -584,7 +584,7 @@ class observation():
         image_stack = [self.psf_result.data_arr[0],self.psf_result.bkg_arr[0],self.psf_result.psf_arr[0],self.psf_result.psf_arr[0]+self.psf_result.bkg_arr[0],self.psf_result.resid_arr[0]]
         return fig, image_stack
 
-    def plot_psf_posterior(self,minweight=-np.inf):
+    def plot_psf_posterior(self, minweight=-np.inf):
         """
         Plot the posterior corner plot from nested sampling
 
@@ -595,15 +595,29 @@ class observation():
             (to zoom in on posterior)
         """
         import corner
+
         try:
             samples = self.psf_result.samples
         except:
             print('Must fit PSF before plotting.')
             return
+            
         weights = self.psf_result.weights
-        samples = samples[weights>minweight]
-        weights = weights[weights>minweight]
+        
+        # 1. Ensure 'samples' and 'weights' are robust numpy arrays
+        samples = np.array(samples)
+        weights = np.array(weights)
 
+        # 2. Transpose if parameters are rows instead of columns
+        if samples.shape[0] == len(self.psf_result.vparam_names):
+            samples = samples.T
+
+        # 3. Cleanly mask along the samples axis (Axis 0) using NumPy 2.x syntax
+        mask = weights > minweight
+        samples = samples[mask, :]
+        weights = weights[mask]
+
+        # 4. Generate the plot
         fig = corner.corner(
             samples,
             weights=weights,
@@ -621,7 +635,8 @@ class observation():
             use_mathtext=True,
             title_kwargs={"fontsize": 11},
             label_kwargs={'fontsize': 16})
-        #plt.show()
+            
+        return fig
 
 
 class observation3(observation):
