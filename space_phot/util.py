@@ -46,7 +46,7 @@ from photutils.aperture import (
     CircularAnnulus,
     aperture_photometry,
 )
-from photutils.psf import EPSFModel
+from photutils.psf import ImagePSF
 
 import jwst
 #from jwst import datamodels
@@ -510,6 +510,12 @@ def _build_output_gwcs_from_fits_header(ref_fname):
 
 def _write_resample_output_wcs(ref_fname, out_asdf):
     gw, (ny, nx) = _build_output_gwcs_from_fits_header(ref_fname)
+
+    try:
+        if hasattr(gw, '_pipeline') and len(gw._pipeline) > 0:
+            gw._pipeline[-1].frame.name = "world"
+    except Exception:
+        pass 
 
     tree = {
         "wcs": gw,
