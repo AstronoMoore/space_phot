@@ -594,6 +594,7 @@ class observation():
             A minimum weight to show from the nested sampling
             (to zoom in on posterior)
         """
+        print(f"Shape of samples: {self.psf_result.samples.shape}")
         import corner
         try:
             samples = self.psf_result.samples
@@ -601,8 +602,9 @@ class observation():
             print('Must fit PSF before plotting.')
             return
         weights = self.psf_result.weights
-        samples = samples[weights>minweight]
-        weights = weights[weights>minweight]
+        mask = weights > minweight
+        samples = samples[mask, :]  # The ', :' forces NumPy to keep it 2D!
+        weights = weights[mask]
 
         fig = corner.corner(
             samples,
@@ -623,7 +625,6 @@ class observation():
             label_kwargs={'fontsize': 16})
         
         return fig
-        #plt.show()
 
 
 class observation3(observation):
