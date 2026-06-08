@@ -621,6 +621,8 @@ class observation():
             use_mathtext=True,
             title_kwargs={"fontsize": 11},
             label_kwargs={'fontsize': 16})
+        
+        return fig
         #plt.show()
 
 
