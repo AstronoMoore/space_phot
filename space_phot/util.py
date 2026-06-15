@@ -391,19 +391,13 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
     #kernel = astropy.convolution.Box2DKernel(width=4)
     for i in range(st_obs.n_exposures):
 
-
-
         #inst.pixelscale = st_obs.pixel_scale[i]
         imwcs = st_obs.wcs_list[i]
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        x = np.asarray(x)
-        y = np.asarray(y)
+        
 
-        if x.size == 1:
-            x = x.item()
-
-        if y.size == 1:
-            y = y.item()
+        x = float(np.asarray(x).squeeze())
+        y = float(np.asarray(y).squeeze())
         #inst.detector_position = (x,y)
         c = stpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = 1, psf_location = (x,y), fov_pixels = psf_width,
                                                                         detectors=st_obs.detector,save=False,verbose=False,
@@ -623,15 +617,9 @@ def get_jwst3_psf(st_obs, st_obs3, sky_location, num_psfs=4, psf_width=31, temp_
         level3[level3 < 0] = 0
 
         y, x = astropy.wcs.utils.skycoord_to_pixel(sky_location, imwcs)
-        
-        x = np.asarray(x)
-        y = np.asarray(y)
 
-        if x.size == 1:
-            x = x.item()
-
-        if y.size == 1:
-            y = y.item()
+        x = float(np.asarray(x).squeeze())
+        y = float(np.asarray(y).squeeze())
     
         mx, my = np.meshgrid(
             np.arange(-4 * psf_width / 2, psf_width / 2 * 4 + 1, 1).astype(int) + int(x + 0.5),
