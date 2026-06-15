@@ -546,7 +546,14 @@ def get_jwst3_psf(st_obs, st_obs3, sky_location, num_psfs=4, psf_width=31, temp_
             with fits.open(f) as dat:
                 imwcs = wcs.WCS(dat["SCI", 1])
                 y, x = skycoord_to_pixel(sky_location, imwcs)
+                x = np.asarray(x)
+                y = np.asarray(y)
 
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
                 xf, yf = np.mgrid[
                     0:dat["SCI", 1].data.shape[0],
                     0:dat["SCI", 1].data.shape[1]
@@ -610,6 +617,16 @@ def get_jwst3_psf(st_obs, st_obs3, sky_location, num_psfs=4, psf_width=31, temp_
         level3[level3 < 0] = 0
 
         y, x = astropy.wcs.utils.skycoord_to_pixel(sky_location, imwcs)
+        
+        x = np.asarray(x)
+        y = np.asarray(y)
+
+        if x.size == 1:
+            x = x.item()
+
+        if y.size == 1:
+            y = y.item()
+    
         mx, my = np.meshgrid(
             np.arange(-4 * psf_width / 2, psf_width / 2 * 4 + 1, 1).astype(int) + int(x + 0.5),
             np.arange(-4 * psf_width / 2, psf_width / 2 * 4 + 1, 1).astype(int) + int(y + 0.5)
