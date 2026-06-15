@@ -834,14 +834,14 @@ class observation3(observation):
 
         if xy_position is None:
             yi,xi = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs)
-            x = np.asarray(x)
-            y = np.asarray(y)
+            xi = np.asarray(xi)
+            yi = np.asarray(yi)
 
-            if x.size == 1:
-                x = x.item()
+            if xi.size == 1:
+                xi = xi.item()
 
-            if y.size == 1:
-                y = y.item()
+            if yi.size == 1:
+                yi = yi.item()
         else:
             xi,yi = xy_position
         xi+=xshift
