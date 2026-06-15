@@ -726,7 +726,50 @@ class observation3(observation):
         #    self.epadu = self.sci_header['XPOSURE']*self.sci_header['PHOTMJSR']
         #else:
         #    raise RuntimeError('do this for HST')
+    
+    def plot_psf_posterior(self, minweight=-np.inf):
+        """
+        Plot the posterior corner plot from nested sampling
+        
+        """
+        import corner
+        import numpy as np
 
+        try:
+            samples = np.asarray(self.psf_result.samples, dtype=float)
+        except:
+            print('Must fit PSF before plotting.')
+            return
+            
+        weights = np.asarray(self.psf_result.weights, dtype=float)
+
+        # Apply the mask along the rows cleanly
+        mask = weights > minweight
+        samples = samples[mask, :]
+        weights = weights[mask]
+
+        print(f"Final shape sent to corner: {samples.shape}")
+
+        fig = corner.corner(
+            samples,
+            weights=weights,
+            labels=self.psf_result.vparam_names,
+            quantiles=(0.16, .5, 0.84),
+            bins=20,
+            color='k',
+            show_titles=True,
+            title_fmt='.2f',
+            smooth1d=False,
+            smooth=True,
+            fill_contours=True,
+            plot_contours=False,
+            plot_density=True,
+            use_mathtext=True,
+            title_kwargs={"fontsize": 11},
+            label_kwargs={'fontsize': 16})
+        
+        return fig
+    
     def upper_limit(self,nsigma=3,method='psf'):
         if method.lower()=='psf':
             try:
@@ -2405,9 +2448,6 @@ class observation2(observation):
             temp.writeto(self.exposure_fnames[i].replace('.fits','_resid.fits'),overwrite=True)
             temp.close()
         return [self.exposure_fnames[i].replace('.fits','_resid.fits') for i in range(self.n_exposures)]
-
-
-     
 
     
 
