@@ -66,6 +66,15 @@ def loglike(parameters,psf_models,wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,flu
                                                         parameters[vparam_names.index('dec')],
                                                         unit=astropy.units.deg)
             y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,wcs_list[i])
+            x = np.asarray(x)
+            y = np.asarray(y)
+
+            if x.size == 1:
+                x = x.item()
+
+            if y.size == 1:
+                y = y.item()
+            
             psf_models[i].x_0 = x
             psf_models[i].y_0 = y
         elif fit_pixel:
@@ -393,6 +402,14 @@ class observation():
                                                                 parameters[vparam_names.index('dec')],
                                                                 unit=astropy.units.deg)
                     y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[i])
+                    x = np.asarray(x)
+                    y = np.asarray(y)
+
+                    if x.size == 1:
+                        x = x.item()
+
+                    if y.size == 1:
+                        y = y.item()
                     self.psf_model_list[i].x_0 = x
                     self.psf_model_list[i].y_0 = y
                 elif fit_pixel:
@@ -493,6 +510,14 @@ class observation():
                                                             res.best[vparam_names.index('dec')],
                                                             unit=astropy.units.deg)
                 y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[i])
+                x = np.asarray(x)
+                y = np.asarray(y)
+
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
                 self.psf_model_list[i].x_0 = x
                 self.psf_model_list[i].y_0 = y
             elif fit_pixel:
@@ -809,6 +834,14 @@ class observation3(observation):
 
         if xy_position is None:
             yi,xi = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs)
+            x = np.asarray(x)
+            y = np.asarray(y)
+
+            if x.size == 1:
+                x = x.item()
+
+            if y.size == 1:
+                y = y.item()
         else:
             xi,yi = xy_position
         xi+=xshift
@@ -1182,6 +1215,14 @@ class observation3(observation):
         if xy_positions is None:
             try:
                 x, y = astropy.wcs.utils.skycoord_to_pixel(sky_location, self.wcs)
+                x = np.asarray(x)
+                y = np.asarray(y)
+
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
                 positions = np.atleast_2d(np.column_stack([x, y]))
             except Exception:
                 positions = np.atleast_2d(
@@ -1363,6 +1404,14 @@ class observation3(observation):
         for j in range(len(plant_locations)):
             if isinstance(plant_locations[j],astropy.coordinates.SkyCoord):
                 y,x = astropy.wcs.utils.skycoord_to_pixel(plant_locations[j],self.wcs)
+                x = np.asarray(x)
+                y = np.asarray(y)
+
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
                 ra = plant_locations[j].ra.value
                 dec = plant_locations[j].dec.value
             else:
@@ -1549,6 +1598,14 @@ class observation2(observation):
             for j in range(len(plant_locations)):
                 if isinstance(plant_locations[j],astropy.coordinates.SkyCoord):
                     y,x = astropy.wcs.utils.skycoord_to_pixel(plant_locations[j],self.wcs_list[i])
+                    x = np.asarray(x)
+                    y = np.asarray(y)
+
+                    if x.size == 1:
+                        x = x.item()
+
+                    if y.size == 1:
+                        y = y.item()
                     ra = plant_locations[j].ra.value
                     dec = plant_locations[j].dec.value
                 else:
@@ -1692,6 +1749,14 @@ class observation2(observation):
                 elif not isinstance(sc, SkyCoord) and hasattr(sc, "__len__"):
                     sc = sc[i]
                 x, y = skycoord_to_pixel(sc, self.wcs_list[i])
+                x = np.asarray(x)
+                y = np.asarray(y)
+
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
                 return np.atleast_2d([x, y])
 
             xy = np.array(xy_positions, dtype=float)
@@ -1974,6 +2039,14 @@ class observation2(observation):
                 xi,yi = xy_positions[im]
             else:
                 yi,xi = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[im])
+                x = np.asarray(x)
+                y = np.asarray(y)
+
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
             
             xi+=xshift[im]
             yi+=yshift[im]
@@ -2165,6 +2238,14 @@ class observation2(observation):
                                                             dec,
                                                             unit=astropy.units.deg)
                 y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[i])
+                x = np.asarray(x)
+                y = np.asarray(y)
+
+                if x.size == 1:
+                    x = x.item()
+
+                if y.size == 1:
+                    y = y.item()
                 #raise RuntimeError('Need to implement xy errors from wcs')
                 xerr = 0
                 yerr = 0
