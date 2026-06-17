@@ -114,7 +114,7 @@ def do_nest(args):
     with Pool(10, loglike, prior_transform,logl_args=args) as pool:
         sampler = NestedSampler(pool.loglike, pool.prior_transform,
                                 len(vparam_names), pool = pool)
-        sampler.run_nested()
+        sampler.run_nested(dlogz=0.01)
     return sampler
 
 class observation():
@@ -439,7 +439,7 @@ class observation():
         
         
         sampler = NestedSampler(loglike, prior_transform, ndim, nlive = npoints)
-        sampler.run_nested(maxiter=maxiter,maxcall=maxcall,print_progress=True)
+        sampler.run_nested(maxiter=maxiter,maxcall=maxcall,print_progress=True,dlogz=0.01)
         #res = nestle.sample(loglike, prior_transform, ndim, npdim=npdim,
         #                  npoints=npoints, method=method, maxiter=maxiter,
         #                  maxcall=maxcall, rstate=rstate,
