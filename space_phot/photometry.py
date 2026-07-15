@@ -1326,7 +1326,7 @@ class observation3(observation):
                 * self.wcs.wcs.cunit[0].to("arcsec")
             )
             # hst_apcorr expects radius in arcsec
-            apcorr_arr = hst_apcorr(radius * px_scale, self.filter, self.instrument)
+            apcorr_arr = hst_apcorr(radius * px_scale, self.filter, self.detector)
             try:
                 apcorr = float(apcorr_arr[0])
             except Exception:
@@ -1880,7 +1880,7 @@ class observation2(observation):
                     proj_plane_pixel_scales(self.wcs_list[i])[0]
                     * self.wcs_list[i].wcs.cunit[0].to("arcsec")
                 )
-                apcorr_arr = hst_apcorr(radius_i * px_scale, self.filter, self.instrument)
+                apcorr_arr = hst_apcorr(radius_i * px_scale, self.filter, self.detector)
                 try:
                     apcorr = float(apcorr_arr[0])
                 except Exception:

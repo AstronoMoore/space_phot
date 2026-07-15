@@ -700,7 +700,7 @@ def get_hst_psf(st_obs,sky_location,psf_width=25,pipeline_level=2):
         #_psf_interp = psfinterp(grid._xidx, grid._yidx)
         _psf_interp/=simple_aperture_sum(_psf_interp,[[_psf_interp.shape[0]/2,_psf_interp.shape[0]/2]],5.6*4)
         _psf_interp*=16
-        _psf_interp*=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.instrument))
+        _psf_interp*=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.detector))
 
         if pipeline_level==2:
             psfmodel = photutils.psf.ImagePSF(_psf_interp,
@@ -839,7 +839,7 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         #level3[mx,my]*=np.median(level2_sums)
 
         level3[mx,my]*=16
-        level3[mx,my]*=(hst_apcorr(5.6*st_obs3.px_scale,st_obs3.filter,st_obs3.instrument))
+        level3[mx,my]*=(hst_apcorr(5.6*st_obs3.px_scale,st_obs3.filter,st_obs3.detector))
         #level3[mx,my]*=(np.median(level2_sums)/simple_aperture_sum(level3[mx,my],[[level3[mx,my].shape[0]/2,
         #                                    level3[mx,my].shape[1]/2]],5.6*4))
         #level3[mx,my]*=16
@@ -1172,7 +1172,7 @@ def jwst_aperture_phot(fname,ra,dec,
 
 
 def hst_apcorr(ap,filt,inst):
-    if inst=='ir':
+    if inst.lower()=='ir':
         if not os.path.exists('ir_ee_corrections.csv'):
             urllib.request.urlretrieve('https://www.stsci.edu/files/live/sites/www/files/home/hst/'+\
                                        'instrumentation/wfc3/data-analysis/photometric-calibration/'+\
