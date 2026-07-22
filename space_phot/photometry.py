@@ -1707,7 +1707,48 @@ class observation2(observation):
             temp.writeto(self.exposure_fnames[i].replace('.fits','_plant.fits'),overwrite=True)
 
 
-    
+    def plot_psf_posterior(self, minweight=-np.inf):
+        """
+        Plot the posterior corner plot from nested sampling
+        
+        """
+        import corner
+        import numpy as np
+
+        try:
+            samples = np.asarray(self.psf_result.samples, dtype=float)
+        except:
+            print('Must fit PSF before plotting.')
+            return
+            
+        weights = np.asarray(self.psf_result.weights, dtype=float)
+
+        # Apply the mask along the rows cleanly
+        mask = weights > minweight
+        samples = samples[mask, :]
+        weights = weights[mask]
+
+        print(f"Final shape sent to corner: {samples.shape}")
+
+        fig = corner.corner(
+            samples,
+            weights=weights,
+            labels=self.psf_result.vparam_names,
+            quantiles=(0.16, .5, 0.84),
+            bins=20,
+            color='k',
+            show_titles=True,
+            title_fmt='.2f',
+            smooth1d=False,
+            smooth=True,
+            fill_contours=True,
+            plot_contours=False,
+            plot_density=True,
+            use_mathtext=True,
+            title_kwargs={"fontsize": 11},
+            label_kwargs={'fontsize': 16})
+        
+        return fig
 
 
     def aperture_photometry(
@@ -2082,14 +2123,7 @@ class observation2(observation):
                 xi,yi = xy_positions[im]
             else:
                 yi,xi = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[im])
-                x = np.asarray(x)
-                y = np.asarray(y)
 
-                if x.size == 1:
-                    x = x.item()
-
-                if y.size == 1:
-                    y = y.item()
             
             xi+=xshift[im]
             yi+=yshift[im]
@@ -2100,7 +2134,6 @@ class observation2(observation):
             
             
             cutout = self.data_arr_pam[im][xf, yf]
-
 
             if background is None:
                 all_bg_est.append(np.zeros_like(cutout))
