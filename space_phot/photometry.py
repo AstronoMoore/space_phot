@@ -30,6 +30,7 @@ from .util import (
     jwst_apcorr_interp,
     hst_apcorr,
     simple_aperture_sum,
+    apcorr_radius_in_native_pixels
 )
 
 from .cal import (
@@ -657,29 +658,31 @@ class observation3(observation):
     """
     st_phot class for level 3 (drizzled) data
     """
-    def __init__(self,fname):
+    def __init__(self,fname,sci_ext=1):
         self.pipeline_level = 3
         self.fname = fname
+        self.sci_ext = int(sci_ext)
+        
         self.fits = astropy.io.fits.open(self.fname)
         
 
-        self.data = self.fits['SCI',1].data
+        self.data = self.fits['SCI',self.sci_ext].data
 
         try:            
-            self.err = self.fits['ERR',1].data
+            self.err = self.fits['ERR',self.sci_ext].data
         except:
             try:
-                self.err = 1./np.sqrt(self.fits['WHT',1].data)
+                self.err = 1./np.sqrt(self.fits['WHT',self.sci_ext].data)
             except:
                 self.err = np.sqrt(self.data)
 
         try:
-            self.dq = self.fits['DQ',1].data
+            self.dq = self.fits['DQ',self.sci_ext].data
         except:
             self.dq = np.zeros(self.data.shape)
 
         self.prim_header = self.fits[0].header
-        self.sci_header = self.fits['SCI',1].header
+        self.sci_header = self.fits['SCI',self.sci_ext].header
 
         self.wcs = astropy.wcs.WCS(self.sci_header)
         self.pams = [np.ones(self.data.shape)]
@@ -804,8 +807,8 @@ class observation3(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         sky_location : :class:`~astropy.coordinates.SkyCoord`
             Location of your source
@@ -941,6 +944,8 @@ class observation3(observation):
                 
         else:
             centers.append([xi+centroidx_shift,yi+centroidy_shift])
+
+        center = centers[-1]
         all_xf.append(xf)
         all_yf.append(yf)
         cutout[cutout<minVal] = 0
@@ -1162,7 +1167,7 @@ class observation3(observation):
         skyan_in=None,
         skyan_out=None,
         alternate_ref=None,
-        radius_in_arcsec=False,
+        radius_in_arcsec=False
     ):
         """
         Perform aperture photometry on a single drizzled (level 3) image.
@@ -1279,7 +1284,17 @@ class observation3(observation):
         sky_in_pix = skyan_in
         sky_out_pix = skyan_out
 
+        
+        
+
         if self.telescope.upper() == "JWST":
+            r_apcorr_pxcorr = apcorr_radius_in_native_pixels(
+                radius_pixels=1,
+                image_pixel_scale=self.pixel_scale,
+                telescope=self.telescope,
+                instrument=self.instrument,
+                filt=self.filter
+            )
             # JWST: aperture correction lookup/interp
             if ee is not None:
                 apres = jwst_apcorr(self.fname, ee, alternate_ref=alternate_ref)
@@ -1295,9 +1310,12 @@ class observation3(observation):
                 if sky_out_pix is None:
                     sky_out_pix = float(ref_sky_out_pix)
 
+                radius/=r_apcorr_pxcorr
+                sky_in_pix/=r_apcorr_pxcorr
+                sky_out_pix/=r_apcorr_pxcorr
             else:
                 # jwst_apcorr_interp expects radius in PIXELS
-                apres = jwst_apcorr_interp(self.fname, float(radius), alternate_ref=alternate_ref)
+                apres = jwst_apcorr_interp(self.fname, float(radius)*r_apcorr_pxcorr, alternate_ref=alternate_ref)
                 if apres is None:
                     raise RuntimeError(
                         f"Failed JWST aperture correction interpolation for radius={radius} px."
@@ -1305,9 +1323,9 @@ class observation3(observation):
 
                 ee, apcorr, ref_sky_in_pix, ref_sky_out_pix = apres
                 if sky_in_pix is None:
-                    sky_in_pix = float(ref_sky_in_pix)
+                    sky_in_pix = float(ref_sky_in_pix)/r_apcorr_pxcorr
                 if sky_out_pix is None:
-                    sky_out_pix = float(ref_sky_out_pix)
+                    sky_out_pix = float(ref_sky_out_pix)/r_apcorr_pxcorr
 
             # For JWST: noise-scale factor for the aperture-phot error model
             # (keep your existing behavior here)
@@ -1326,7 +1344,7 @@ class observation3(observation):
                 * self.wcs.wcs.cunit[0].to("arcsec")
             )
             # hst_apcorr expects radius in arcsec
-            apcorr_arr = hst_apcorr(radius * px_scale, self.filter, self.detector)
+            apcorr_arr = np.ravel(hst_apcorr(radius * px_scale, self.filter, self.detector))
             try:
                 apcorr = float(apcorr_arr[0])
             except Exception:
@@ -1421,8 +1439,8 @@ class observation3(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         plant_locations : list
             The location(s) to plant the psf
@@ -1486,7 +1504,7 @@ class observation3(observation):
             plant_info['flux'].append(np.sum(psf_arr))
             
 
-            temp['SCI',1].data[xf,yf]+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
+            temp['SCI',self.sci_ext].data[xf,yf]+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
                 #psf_arr,[x,y])
         astropy.table.Table(plant_info).write(out_fname.replace('.fits','.dat'),overwrite=True,
                                               format='ascii.ecsv')
@@ -1598,8 +1616,8 @@ class observation2(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         plant_locations : list
             The location(s) to plant the psf
@@ -1693,7 +1711,7 @@ class observation2(observation):
                 plant_info['flux'].append(np.sum(psf_arr))
                 
 
-                temp['SCI',1].data+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
+                temp['SCI',self.sci_ext].data+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
                     #psf_arr,[x,y])
             if not multi_plant or first_plant:
                 astropy.table.Table(plant_info).write(self.exposure_fnames[i].replace('.fits','_plant.dat'),overwrite=True,
@@ -1921,7 +1939,8 @@ class observation2(observation):
                     proj_plane_pixel_scales(self.wcs_list[i])[0]
                     * self.wcs_list[i].wcs.cunit[0].to("arcsec")
                 )
-                apcorr_arr = hst_apcorr(radius_i * px_scale, self.filter, self.detector)
+                apcorr_arr = np.ravel(hst_apcorr(radius_i * px_scale, self.filter, self.detector))
+                
                 try:
                     apcorr = float(apcorr_arr[0])
                 except Exception:
@@ -1952,22 +1971,23 @@ class observation2(observation):
             # Fill raw result
             result["pos_x"].append(float(positions[0][0]))
             result["pos_y"].append(float(positions[0][1]))
-            result["aper_bkg"].append(float(phot["aper_bkg"]))
-            result["aperture_sum"].append(float(phot["aperture_sum"]))
+
+            result["aper_bkg"].append(float(np.ravel(np.array(phot["aper_bkg"]))[0]))
+            result["aperture_sum"].append(float(np.ravel(np.array(phot["aperture_sum"]))[0]))
             result["aperture_sum_err"].append(
-                float(phot["aperture_sum_err"]) if "aperture_sum_err" in phot.colnames else 0.0
+                float(np.ravel(np.array(phot["aperture_sum_err"]))[0]) if "aperture_sum_err" in phot.colnames else 0.0
             )
-            result["aper_sum_bkgsub"].append(float(phot["aper_sum_bkgsub"]))
-            result["annulus_median"].append(float(phot["annulus_median"]))
+            result["aper_sum_bkgsub"].append(float(np.ravel(np.array(phot["aper_sum_bkgsub"]))[0]))
+            result["annulus_median"].append(float(np.ravel(np.array(phot["annulus_median"]))[0]))
             expname = os.path.basename(self.exposure_fnames[i])
             result["exp"].append(expname)
 
             # Apply aperture correction
             if self.telescope.lower() == "jwst":
-                corr = float(phot["aper_sum_bkgsub"] * apcorr)
+                corr = float(np.ravel(np.array(phot["aper_sum_bkgsub"]))[0] * apcorr)
                 err_corr = result["aperture_sum_err"][-1] * apcorr
             else:
-                corr = float(phot["aper_sum_bkgsub"] / apcorr)
+                corr = float(np.ravel(np.array(phot["aper_sum_bkgsub"]))[0] / apcorr)
                 err_corr = result["aperture_sum_err"][-1] / apcorr
 
             result["aper_sum_corrected"].append(corr)
@@ -2035,8 +2055,8 @@ class observation2(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         sky_location : :class:`~astropy.coordinates.SkyCoord`
             Location of your source
